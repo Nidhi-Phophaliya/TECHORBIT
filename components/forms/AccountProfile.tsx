@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+
 import { UserValidation } from "@/lib/validations/user";
 import { profile } from "console";
 import * as z from "zod";
@@ -20,6 +21,9 @@ import Image from "next/image";
 import { ChangeEvent, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { isBase64Image } from "@/lib/utils";
+import { useUploadThing } from "@/lib/uploadthing";
+import { updateUser } from "@/lib/actions/user.actions";
+import { usePathname, useRouter } from "next/navigation";
 
 interface Props {
   user: {
@@ -34,8 +38,10 @@ interface Props {
 }
 
 const AccountProfile = ({ user, btnTitle }: Props) => {
-
-const [files, setfiles] = useState<File[]>([])
+  const { startUpload } = useUploadThing("media");
+  const [files, setfiles] = useState<File[]>([]);
+  const router = useRouter();
+  const pathname = usePathname();
 
   const form = useForm({
     resolver: zodResolver(UserValidation),
@@ -47,34 +53,55 @@ const [files, setfiles] = useState<File[]>([])
     },
   });
 
-  const handleImage = ( e: ChangeEvent <HTMLInputElement>,
-    fieldChange: (value: string) => void) => {
+  const handleImage = (
+    e: ChangeEvent<HTMLInputElement>,
+    fieldChange: (value: string) => void,
+  ) => {
     e.preventDefault();
 
-    const fileReader  = new FileReader(); 
+    const fileReader = new FileReader();
 
-    if ( e.target.files && e.target.files.length > 0){
-        const file = e.target.files[0]; 
-        setfiles(Array.from(e.target.files));
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      setfiles(Array.from(e.target.files));
 
-        if(!file.type.includes('image')) return; 
-        fileReader.onload = async(event) => {
-            const imageDataUrl = event.target?.result?.toString() || "";  
+      if (!file.type.includes("image")) return;
+      fileReader.onload = async (event) => {
+        const imageDataUrl = event.target?.result?.toString() || "";
 
-            fieldChange(imageDataUrl); 
-            };
-          fileReader.readAsDataURL(file);   
+        fieldChange(imageDataUrl);
+      };
+      fileReader.readAsDataURL(file);
     }
-
   };
 
-  function onSubmit(values: z.infer<typeof UserValidation>) {
+  const onSubmit = async (values: z.infer<typeof UserValidation>) => {
     // Do something with the form values.
     // ✅ This will be type-safe and validated.
-    const blob = values.profile_photo; 
+    const blob = values.profile_photo;
     const hasImageChanged = isBase64Image(blob);
-    console.log(values);
-  }
+    if (hasImageChanged) {
+      const imgRes = await startUpload(files);
+
+      if (imgRes && imgRes[0].url) {
+        values.profile_photo = imgRes[0].url;
+      }
+    }
+    await updateUser({
+      userId: user.id,
+      username: values.username,
+      name: values.name,
+      bio: values.bio,
+      image: values.profile_photo,
+      path: pathname,
+    });
+
+    if (pathname === "/profile/edit") {
+      router.back();
+    } else {
+      router.push("/");
+    }
+  };
 
   return (
     <Form {...form}>
@@ -107,7 +134,7 @@ const [files, setfiles] = useState<File[]>([])
                   />
                 )}
               </FormLabel>
-              <FormControl className="flex-1 text-base-semibold text-gray-200">
+              <FormControl className="flex-1 text-base-semibold text-gray-200 p-3">
                 <Input
                   type="file"
                   accept="image/"
@@ -124,13 +151,13 @@ const [files, setfiles] = useState<File[]>([])
           control={form.control}
           name="name"
           render={({ field }) => (
-            <FormItem className="flex  flex-col gap-3 w-full">
-              <FormLabel className="text-base-semibold text-light-2">
+            <FormItem className="flex  flex-col gap-3 w-full p-3">
+              <FormLabel className="text-base-semibold text-light-2 p-1">
                 Name
               </FormLabel>
               <FormControl>
                 <Input
-                type="text"
+                  type="text"
                   className="account-form_input no-focus"
                   {...field}
                 />
@@ -139,17 +166,17 @@ const [files, setfiles] = useState<File[]>([])
           )}
         />
 
-<FormField
+        <FormField
           control={form.control}
           name="username"
           render={({ field }) => (
-            <FormItem className="flex flex-col gap-3 w-full">
-              <FormLabel className="text-base-semibold text-light-2">
+            <FormItem className="flex flex-col gap-3 w-full p-3">
+              <FormLabel className="text-base-semibold text-light-2 p-1">
                 Username
               </FormLabel>
               <FormControl>
                 <Input
-                type="text"
+                  type="text"
                   className="account-form_input no-focus"
                   {...field}
                 />
@@ -158,17 +185,17 @@ const [files, setfiles] = useState<File[]>([])
           )}
         />
 
-<FormField
+        <FormField
           control={form.control}
           name="bio"
           render={({ field }) => (
-            <FormItem className="flex flex-col gap-3 w-full">
-              <FormLabel className="text-base-semibold text-light-2">
+            <FormItem className="flex flex-col gap-3 w-full p-3">
+              <FormLabel className="text-base-semibold text-light-2 p-1">
                 Bio
               </FormLabel>
               <FormControl>
                 <Textarea
-                rows={10}
+                  rows={10}
                   className="account-form_input no-focus"
                   {...field}
                 />
@@ -176,7 +203,9 @@ const [files, setfiles] = useState<File[]>([])
             </FormItem>
           )}
         />
-        <Button type="submit" className="bg-primary-500">Submit</Button>
+        <Button type="submit" className="bg-primary-500 p-2">
+          Submit
+        </Button>
       </form>
     </Form>
   );
